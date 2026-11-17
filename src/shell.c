@@ -14,7 +14,7 @@ char* read_cmd(char* prompt, FILE* fp) {
         free(cmdline);
         return NULL; // Handle Ctrl+D
     }
-    
+
     cmdline[pos] = '\0';
     return cmdline;
 }
@@ -38,7 +38,7 @@ char** tokenize(char* cmdline) {
 
     while (*cp != '\0' && argnum < MAXARGS) {
         while (*cp == ' ' || *cp == '\t') cp++; // Skip leading whitespace
-        
+
         if (*cp == '\0') break; // Line was only whitespace
 
         start = cp;
@@ -61,24 +61,20 @@ char** tokenize(char* cmdline) {
     return arglist;
 }
 
-/* ---------- Feature-2: Built-in commands ----------
- * Agar arglist[0] built-in hai to yahin (shell ke process mein)
- * chala kar 1 return karo. Built-in nahi hai to 0 return karo,
- * taake main() usay fork/exec se chalaye.
- */
+/* ---------- Feature-2: Built-in commands ---------- */
 int handle_builtin(char** arglist) {
     char* cmd = arglist[0];
 
     if (strcmp(cmd, "exit") == 0) {
         printf("Exiting shell...\n");
-        exit(0);                      // shell khud band ho jaye
+        exit(0);
     }
 
     if (strcmp(cmd, "cd") == 0) {
         char* dir = arglist[1];
-        if (dir == NULL)              // sirf "cd" likha -> home folder
+        if (dir == NULL)
             dir = getenv("HOME");
-        if (chdir(dir) != 0)          // chdir() shell ka apna folder badalta hai
+        if (chdir(dir) != 0)
             perror("cd");
         return 1;
     }
@@ -89,6 +85,8 @@ int handle_builtin(char** arglist) {
         printf("  exit       Exit the shell\n");
         printf("  help       Show this help message\n");
         printf("  jobs       List background jobs\n");
+        printf("  history    Show command history\n");
+        printf("  !n         Re-run command number n from history\n");
         return 1;
     }
 
@@ -97,5 +95,40 @@ int handle_builtin(char** arglist) {
         return 1;
     }
 
-    return 0;                         // built-in nahi hai
+    if (strcmp(cmd, "history") == 0) {   // Feature-3
+        print_history();
+        return 1;
+    }
+
+    return 0;
+}
+
+/* ---------- Feature-3: Command history ----------
+ * cmd_history[0] sabse purani command, cmd_history[hist_count-1] sabse nayi.
+ * Array full ho jaye to sabse purani free karke baqi sab ek jagah
+ * left shift kar do, taake numbering hamesha 1..20 rahe.
+ */
+static char* cmd_history[HISTORY_SIZE];
+static int   hist_count = 0;
+
+void add_to_history(const char* cmdline) {
+    if (hist_count == HISTORY_SIZE) {            // full: purani hatao
+        free(cmd_history[0]);
+        for (int i = 1; i < HISTORY_SIZE; i++)
+            cmd_history[i - 1] = cmd_history[i];
+        hist_count--;
+    }
+    cmd_history[hist_count++] = strdup(cmdline); // apni copy save karo
+}
+
+void print_history(void) {
+    for (int i = 0; i < hist_count; i++)
+        printf("%3d  %s\n", i + 1, cmd_history[i]);
+}
+
+// n-th command (1 se shuru) wapas do, ghalat n ho to NULL
+char* get_history(int n) {
+    if (n < 1 || n > hist_count)
+        return NULL;
+    return cmd_history[n - 1];
 }
