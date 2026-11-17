@@ -4,29 +4,34 @@ int main() {
     char* cmdline;
     char** arglist;
 
-    while ((cmdline = read_cmd(PROMPT, stdin)) != NULL) {
+    init_readline();                    // Feature-4: tab completion set karo
 
-        // ---- Feature-3: !n  (tokenize aur history se PEHLE check karo)
+    // Feature-4: readline() prompt dikhata hai, line parhta hai
+    // (arrows, Tab sab ke saath) aur malloc ki hui string deta hai.
+    // Ctrl+D par NULL deta hai.
+    while ((cmdline = readline(PROMPT)) != NULL) {
+
+        // ---- Feature-3: !n
         if (cmdline[0] == '!') {
-            int n = atoi(cmdline + 1);          // '!' ke baad wala number
+            int n = atoi(cmdline + 1);
             char* old = get_history(n);
             if (old == NULL) {
                 printf("!%d: event not found\n", n);
                 free(cmdline);
-                continue;                       // wapas prompt par
+                continue;
             }
             free(cmdline);
-            cmdline = strdup(old);              // "!n" ki jagah asal command
-            printf("%s\n", cmdline);            // dikhao kaun si chal rahi hai
+            cmdline = strdup(old);
+            printf("%s\n", cmdline);
         }
 
-        // ---- Feature-3: har non-empty command history mein save karo
+        // ---- har non-empty command save karo
         if (cmdline[0] != '\0') {
-            add_to_history(cmdline);
+            add_to_history(cmdline);    // hamari list (history aur !n ke liye)
+            add_history(cmdline);       // readline ki list (Up/Down arrows ke liye)
         }
 
         if ((arglist = tokenize(cmdline)) != NULL) {
-            // Feature-2: built-in hai to yahin chalao, warna fork/exec
             if (handle_builtin(arglist) == 0) {
                 execute(arglist);
             }
