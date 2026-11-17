@@ -60,3 +60,42 @@ char** tokenize(char* cmdline) {
     arglist[argnum] = NULL;
     return arglist;
 }
+
+/* ---------- Feature-2: Built-in commands ----------
+ * Agar arglist[0] built-in hai to yahin (shell ke process mein)
+ * chala kar 1 return karo. Built-in nahi hai to 0 return karo,
+ * taake main() usay fork/exec se chalaye.
+ */
+int handle_builtin(char** arglist) {
+    char* cmd = arglist[0];
+
+    if (strcmp(cmd, "exit") == 0) {
+        printf("Exiting shell...\n");
+        exit(0);                      // shell khud band ho jaye
+    }
+
+    if (strcmp(cmd, "cd") == 0) {
+        char* dir = arglist[1];
+        if (dir == NULL)              // sirf "cd" likha -> home folder
+            dir = getenv("HOME");
+        if (chdir(dir) != 0)          // chdir() shell ka apna folder badalta hai
+            perror("cd");
+        return 1;
+    }
+
+    if (strcmp(cmd, "help") == 0) {
+        printf("Built-in commands:\n");
+        printf("  cd <dir>   Change the current directory\n");
+        printf("  exit       Exit the shell\n");
+        printf("  help       Show this help message\n");
+        printf("  jobs       List background jobs\n");
+        return 1;
+    }
+
+    if (strcmp(cmd, "jobs") == 0) {
+        printf("Job control not yet implemented.\n");
+        return 1;
+    }
+
+    return 0;                         // built-in nahi hai
+}
