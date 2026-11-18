@@ -10,7 +10,7 @@
  * NULL-terminated array deta hai, khali line par NULL.
  */
 static int is_special(char c) {
-    return c == '<' || c == '>' || c == '|';
+    return c == '<' || c == '>' || c == '|' || c == ';' || c == '&';
 }
 
 char** tokenize(char* cmdline) {
@@ -87,7 +87,7 @@ int handle_builtin(char** arglist) {
     }
 
     if (strcmp(cmd, "jobs") == 0) {
-        printf("Job control not yet implemented.\n");
+        print_jobs();
         return 1;
     }
 

@@ -1,15 +1,61 @@
 #include "shell.h"
 
+/* Feature-6: EK simple command chalao (jis mein ';' nahi).
+ * Aakhir mein "&" ho to background mein chalao. */
+static int run_simple(char** args) {
+    int n = 0;
+    while (args[n] != NULL) n++;
+    if (n == 0) return 0;
+
+    int background = 0;
+    if (strcmp(args[n - 1], "&") == 0) {        // aakhri token "&" hai?
+        background = 1;
+        args[n - 1] = NULL;                     // "&" execvp ko nahi dena
+        if (n == 1) return 0;                   // sirf "&" likha tha
+    }
+
+    if (handle_builtin(args))                   // built-in -> shell mein hi
+        return 0;
+    return execute(args, background);           // external -> fork + exec
+}
+
+/* Feature-6: poori line tokenize karo, ";" par tukde karo, aur
+ * har tukda baari baari chalao. Aakhri tukde ka status return karo. */
+int run_command_line(char* cmdline) {
+    char** arglist = tokenize(cmdline);
+    if (arglist == NULL) return 0;
+
+    int status = 0;
+    char* segment[MAXARGS + 1];
+    int n = 0;
+
+    for (int i = 0; ; i++) {
+        if (arglist[i] == NULL || strcmp(arglist[i], ";") == 0) {
+            segment[n] = NULL;
+            if (n > 0) status = run_simple(segment);   // '&' na ho to intezar karega
+            n = 0;
+            if (arglist[i] == NULL) break;
+        } else {
+            segment[n++] = arglist[i];          // sirf pointer copy
+        }
+    }
+
+    for (int i = 0; arglist[i] != NULL; i++)   // tokenize ki memory free
+        free(arglist[i]);
+    free(arglist);
+    return status;
+}
+
 int main() {
     char* cmdline;
-    char** arglist;
 
-    init_readline();                    // Feature-4: tab completion set karo
+    init_readline();                    // Feature-4
 
-    // Feature-4: readline() prompt dikhata hai, line parhta hai
-    // (arrows, Tab sab ke saath) aur malloc ki hui string deta hai.
-    // Ctrl+D par NULL deta hai.
-    while ((cmdline = readline(PROMPT)) != NULL) {
+    while (1) {
+        reap_jobs();                    // Feature-6: har prompt se pehle zombies saaf karo
+
+        if ((cmdline = readline(PROMPT)) == NULL)
+            break;                      // Ctrl+D
 
         // ---- Feature-3: !n
         if (cmdline[0] == '!') {
@@ -25,22 +71,13 @@ int main() {
             printf("%s\n", cmdline);
         }
 
-        // ---- har non-empty command save karo
+        // ---- history mein save karo
         if (cmdline[0] != '\0') {
-            add_to_history(cmdline);    // hamari list (history aur !n ke liye)
-            add_history(cmdline);       // readline ki list (Up/Down arrows ke liye)
+            add_to_history(cmdline);    // hamari list (history, !n)
+            add_history(cmdline);       // readline ki list (arrows)
         }
 
-        if ((arglist = tokenize(cmdline)) != NULL) {
-            if (handle_builtin(arglist) == 0) {
-                execute(arglist);
-            }
-
-            for (int i = 0; arglist[i] != NULL; i++) {
-                free(arglist[i]);
-            }
-            free(arglist);
-        }
+        run_command_line(cmdline);      // Feature-6: ';' aur '&' yahan handle hote hain
         free(cmdline);
     }
 
