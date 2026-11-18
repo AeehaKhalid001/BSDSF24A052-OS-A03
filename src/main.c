@@ -14,6 +14,12 @@ static int run_simple(char** args) {
         if (n == 1) return 0;                   // sirf "&" likha tha
     }
 
+    // Feature-8: "NAME=value" shell ke andar hi (fork nahi)
+    if (n == 1 && is_assignment(args[0])) {
+        do_assignment(args[0]);
+        return 0;
+    }
+
     if (handle_builtin(args))                   // built-in -> shell mein hi
         return 0;
     return execute(args, background);           // external -> fork + exec
@@ -28,9 +34,22 @@ int run_command_line(char* cmdline) {
     int status = 0;
     char* segment[MAXARGS + 1];
     int n = 0;
+    int seg_start = 0;                          // is tukde ka pehla index
 
     for (int i = 0; ; i++) {
         if (arglist[i] == NULL || strcmp(arglist[i], ";") == 0) {
+            // Feature-8: chalane se THEEK PEHLE is tukde ke $VAR expand karo
+            // (taake "X=5 ; echo $X" mein nayi value mile). Nayi string
+            // arglist mein purani ki jagah lagti hai, isliye neeche free hogi.
+            for (int j = seg_start; j < i; j++) {
+                char* expanded = expand_arg(arglist[j]);
+                if (expanded != NULL) {
+                    free(arglist[j]);
+                    arglist[j] = expanded;
+                    segment[j - seg_start] = expanded;
+                }
+            }
+            seg_start = i + 1;
             segment[n] = NULL;
             if (n > 0) status = run_simple(segment);   // '&' na ho to intezar karega
             n = 0;
@@ -46,12 +65,7 @@ int run_command_line(char* cmdline) {
     return status;
 }
 
-/* ---------- Feature-7: if-then-else-fi ----------
- * first_line jaise: "if grep user /etc/passwd > /dev/null"
- * Hum "> " prompt ke saath lines parhte rehte hain jab tak "fi" na aaye.
- * "then" wali lines ek array mein, "else" wali doosre array mein.
- * Phir condition chalate hain aur exit status dekh kar ek block chalate hain.
- */
+/* ---------- Feature-7: if-then-else-fi ---------- */
 #define MAX_BLOCK 50
 
 /* shuru aur aakhir ke spaces/tabs/newlines hata do ("  then " -> "then") */
@@ -98,8 +112,6 @@ static void handle_if(char* first_line) {
         goto cleanup;
     }
 
-    // Condition normal fork-exec-wait se chalao.
-    // run_command_line() aakhri command ka WEXITSTATUS deta hai:
     // 0 = success -> then-block, non-zero = failure -> else-block
     if (run_command_line(condition) == 0) {
         for (int i = 0; i < n_then; i++) run_command_line(then_block[i]);

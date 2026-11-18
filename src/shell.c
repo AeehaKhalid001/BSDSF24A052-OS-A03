@@ -60,6 +60,10 @@ char** tokenize(char* cmdline) {
 /* ---------- Feature-2: Built-in commands ---------- */
 int handle_builtin(char** arglist) {
     char* cmd = arglist[0];
+    if (strcmp(cmd, "set") == 0) {      // Feature-8: saare variables dikhao
+        print_vars();
+        return 1;
+    }
 
     if (strcmp(cmd, "exit") == 0) {
         printf("Exiting shell...\n");
@@ -125,7 +129,7 @@ char* get_history(int n) {
 }
 
 /* ---------- Feature-4: Tab completion (GNU Readline) ---------- */
-static const char* builtin_names[] = { "cd", "exit", "help", "jobs", "history", NULL };
+static const char* builtin_names[] = { "cd", "exit", "help", "jobs", "history", "set", NULL };
 
 static char* command_generator(const char* text, int state) {
     static int    b_index;
