@@ -1,43 +1,58 @@
 #include "shell.h"
 
+/* ---------- tokenize (Feature-5 mein nayi likhi) ----------
+ * Command line ko tokens mein torta hai:
+ *  - space/tab tokens ko alag karte hain
+ *  - "double" ya 'single' quotes ke andar ka text ek hi token rehta hai,
+ *    aur quotes khud hata diye jate hain:  echo "a b"  ->  echo | a b
+ *  - < > |  hamesha alag token bante hain, chahe space na ho:
+ *    ls>out.txt  ->  ls | > | out.txt
+ * NULL-terminated array deta hai, khali line par NULL.
+ */
+static int is_special(char c) {
+    return c == '<' || c == '>' || c == '|';
+}
+
 char** tokenize(char* cmdline) {
-    // Edge case: empty command line
-    if (cmdline == NULL || cmdline[0] == '\0' || cmdline[0] == '\n') {
+    if (cmdline == NULL || cmdline[0] == '\0' || cmdline[0] == '\n')
         return NULL;
-    }
 
-    char** arglist = (char**)malloc(sizeof(char*) * (MAXARGS + 1));
-    for (int i = 0; i < MAXARGS + 1; i++) {
-        arglist[i] = (char*)malloc(sizeof(char) * ARGLEN);
-        bzero(arglist[i], ARGLEN);
-    }
-
-    char* cp = cmdline;
-    char* start;
-    int len;
+    char** arglist = malloc(sizeof(char*) * (MAXARGS + 1));
     int argnum = 0;
+    char* cp = cmdline;
 
     while (*cp != '\0' && argnum < MAXARGS) {
-        while (*cp == ' ' || *cp == '\t') cp++; // Skip leading whitespace
+        while (*cp == ' ' || *cp == '\t' || *cp == '\n' || *cp == '\r') cp++;      // spaces chhor do
+        if (*cp == '\0') break;
 
-        if (*cp == '\0') break; // Line was only whitespace
+        char token[ARGLEN];
+        int len = 0;
 
-        start = cp;
-        len = 1;
-        while (*++cp != '\0' && !(*cp == ' ' || *cp == '\t')) {
-            len++;
+        if (is_special(*cp)) {                       // < > | akela token
+            token[len++] = *cp++;
+        } else {
+            char quote = 0;                          // 0 = quotes ke andar nahi
+            while (*cp != '\0' && len < ARGLEN - 1) {
+                if (quote) {                         // "..." ya '...' ke andar
+                    if (*cp == quote) quote = 0;     // band hone wala quote: chhor do
+                    else token[len++] = *cp;         // andar ka har char (space bhi) rakho
+                } else {
+                    if (*cp == ' ' || *cp == '\t' || *cp == '\n' || *cp == '\r' || is_special(*cp))
+                        break;                       // token khatam
+                    if (*cp == '"' || *cp == '\'') quote = *cp;  // khulne wala quote: chhor do
+                    else token[len++] = *cp;
+                }
+                cp++;
+            }
         }
-        strncpy(arglist[argnum], start, len);
-        arglist[argnum][len] = '\0';
-        argnum++;
+        token[len] = '\0';
+        arglist[argnum++] = strdup(token);           // token ki apni copy
     }
 
-    if (argnum == 0) { // No arguments were parsed
-        for(int i = 0; i < MAXARGS + 1; i++) free(arglist[i]);
+    if (argnum == 0) {
         free(arglist);
         return NULL;
     }
-
     arglist[argnum] = NULL;
     return arglist;
 }
@@ -109,15 +124,9 @@ char* get_history(int n) {
     return cmd_history[n - 1];
 }
 
-/* ---------- Feature-4: Tab completion (GNU Readline) ----------
- * Agar line ka PEHLA word complete ho raha hai -> command ka naam
- * complete karo (hamare built-ins + $PATH ke saare programs).
- * Baqi words ke liye NULL do -> readline khud file ka naam complete karega.
- */
+/* ---------- Feature-4: Tab completion (GNU Readline) ---------- */
 static const char* builtin_names[] = { "cd", "exit", "help", "jobs", "history", NULL };
 
-// Readline isay baar baar call karta hai: pehli baar state==0, phir 1,2,3...
-// Har call par ek matching naam (malloc kiya hua) do, khatam ho to NULL.
 static char* command_generator(const char* text, int state) {
     static int    b_index;
     static char*  path_copy;
@@ -125,7 +134,7 @@ static char* command_generator(const char* text, int state) {
     static DIR*   dir;
     static size_t len;
 
-    if (state == 0) {                       // pehli call: sab reset
+    if (state == 0) {
         b_index = 0;
         len = strlen(text);
         free(path_copy);
@@ -135,14 +144,12 @@ static char* command_generator(const char* text, int state) {
         dir = NULL;
     }
 
-    // 1) built-in commands ke naam
     while (builtin_names[b_index] != NULL) {
         const char* name = builtin_names[b_index++];
         if (strncmp(name, text, len) == 0)
             return strdup(name);
     }
 
-    // 2) $PATH ke har folder ke programs
     while (dir_name != NULL) {
         if (dir == NULL)
             dir = opendir(dir_name);
@@ -156,16 +163,16 @@ static char* command_generator(const char* text, int state) {
             closedir(dir);
             dir = NULL;
         }
-        dir_name = strtok(NULL, ":");       // PATH ka agla folder
+        dir_name = strtok(NULL, ":");
     }
-    return NULL;                            // aur koi match nahi
+    return NULL;
 }
 
 static char** shell_completion(const char* text, int start, int end) {
-    (void)end;                              // use nahi ho raha (warning se bachne ke liye)
-    if (start == 0)                         // pehla word -> command
+    (void)end;
+    if (start == 0)
         return rl_completion_matches(text, command_generator);
-    return NULL;                            // baqi -> default file completion
+    return NULL;
 }
 
 void init_readline(void) {
